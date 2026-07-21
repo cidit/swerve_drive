@@ -1,4 +1,5 @@
-$fn = 24;
+// $fn = 24;
+// $preview = false;
 $slop = 0.1;
 
 // TODO: make herringbone by sandwiching two helical on top of each other? constrain on hex shaft
@@ -35,7 +36,7 @@ gear_data = planetary_gears(
   max_teeth=max_teeth_count,
   helical=helical,
   sun_ring=2.2,
-  gear_spin=360 / 27 * $t
+  // gear_spin=360 / 27 * $t
 );
 
 echo(gear_data);
@@ -55,22 +56,35 @@ module stage(
   spin = 0,
   orient = UP
 ) {
-  attachable(h=thickness, r=planetary_gear_drive_radius, anchor=anchor, spin=spin, orient=orient) {
-    ring_gear(
-      mod=modulus,
-      teeth=gear_data[1][1],
-      profile_shift=gear_data[1][2],
-      gear_spin=gear_data[1][3],
-      helical=helical,
-      herringbone=true,
-      // backing=4, 
-      or=planetary_gear_drive_radius,
-      backlash=backlash,
-      thickness=bearing_info_w,
-          $gear_steps=2,
-    ) {
+  module ringgear(anchor = CENTER, spin = 0, orient = UP) {
+    attachable(anchor, spin, orient, h=thickness, r=planetary_gear_drive_radius) {
+      if ($preview) {
+        diff()
+          cyl(h=thickness, r=planetary_gear_drive_radius)
+            tag("remove") cyl(h=thickness + 1, r=ring_root_radius);
+      } else {
+        ring_gear(
+          mod=modulus,
+          teeth=gear_data[1][1],
+          profile_shift=gear_data[1][2],
+          gear_spin=gear_data[1][3],
+          helical=helical,
+          herringbone=true,
+          or=planetary_gear_drive_radius,
+          backlash=backlash,
+          thickness=bearing_info_w,
+        );
+      }
+      children();
+    }
+  }
+  module sungear(anchor = CENTER, spin = 0, orient = UP) {
+    r = pitch_radius(mod=modulus, teeth=gear_data[0][1], helical=helical);
+    attachable(anchor, spin, orient, h=thickness, r=r) {
+      if ($preview) {
+        cyl(h=thickness, r=r);
+      } else {
 
-      diff()
         spur_gear(
           mod=modulus,
           teeth=gear_data[0][1],
@@ -81,28 +95,47 @@ module stage(
           thickness=bearing_info_w,
           shaft_diam=0,
           backlash=backlash,
-          $gear_steps=2,
-        ) tag("remove") rex_shaft(h=bearing_info_w + 1, $slop=0.01);
+        );
+      }
+      children();
+    }
+  }
+
+  module planetgear(anchor = CENTER, spin = 0, orient = UP) {
+    r = pitch_radius(mod=modulus, teeth=gear_data[2][1], helical=-helical);
+    attachable(anchor, spin, orient, h=thickness, r=r) {
+      if ($preview) {
+        cyl(h=thickness, r=r);
+      } else {
+        spur_gear(
+          mod=modulus,
+          teeth=gear_data[2][1],
+          profile_shift=gear_data[2][2],
+          helical=-helical,
+          gear_spin=gear_data[2][3][$idx],
+          herringbone=true,
+          thickness=bearing_info_w,
+          shaft_diam=0,
+          backlash=backlash,
+        );
+      }
+      children();
+    }
+  }
+  attachable(anchor, spin, orient, h=thickness, r=planetary_gear_drive_radius) {
+    ringgear() {
+      diff()
+        sungear() tag("remove") rex_shaft(h=bearing_info_w + 1, $slop=0.01);
 
       
       move_copies(gear_data[2][4])
         diff()
-          spur_gear(
-            mod=modulus,
-            teeth=gear_data[2][1],
-            profile_shift=gear_data[2][2],
-            helical=-helical,
-            gear_spin=gear_data[2][3][$idx],
-            herringbone=true,
-            thickness=bearing_info_w,
-            shaft_diam=$idx != shaft_idx ? bearing_info_od : 0,
-            backlash=backlash,
-          $gear_steps=2,
-          ) if ($idx == shaft_idx) {
-            tag("remove") rex_shaft(h=bearing_info_w + 1, $slop=0.01);
-          } else if ($preview) {
-            // ball_bearing("608ZZ");
-          }
+          planetgear() tag("remove") if ($idx == shaft_idx) {
+              rex_shaft(h=bearing_info_w + 1, $slop=0.01);
+            } else {
+              // ball_bearing("608ZZ");
+              cyl(h=thickness + 1, d=bearing_info_od);
+            }
     }
     children();
   }
@@ -130,27 +163,15 @@ module chassis_plate(anchor = CENTER, spin = 0, orient = UP, thickness = 5) {
   }
 }
 
-// module stack_children() {
-//   for (c_idx = [0:$children]) {
-//     children(c_idx);
-//   }
-// }
-
-// chassis_plate();
-// up(20) washer() move_copies(gear_data[2][4]) washer();
-// up (40) stage();
-// up(60) washer() move_copies(gear_data[2][4]) washer();
-// up(80) stage();
-// up(100) chassis_plate();
-
 chassis_plate()
-  attach(TOP, BOT) washer()
-    let (save_pt = parent()) move_copies(gear_data[2][4]) washer() restore(save_pt)
+  attach(TOP, BOT)
+    washer() let (save_pt = parent()) move_copies(gear_data[2][4]) washer() restore(save_pt)
           attach(TOP, BOT)
             stage()
-              attach(TOP, BOT) washer()
-              let (save_pt = parent()) move_copies(gear_data[2][4]) washer() restore(save_pt)
-                      attach(TOP, BOT) stage()
-                          attach(TOP, BOT) washer()
-                          let (save_pt = parent()) move_copies(gear_data[2][4]) washer();
+              attach(TOP, BOT)
+                washer() let (save_pt = parent()) move_copies(gear_data[2][4]) washer() restore(save_pt)
+                      attach(TOP, BOT)
+                        stage()
+                          attach(TOP, BOT)
+                            washer() let (save_pt = parent()) move_copies(gear_data[2][4]) washer();
 // move_copies(gear_data[2][4]) rex_shaft(h=bearing_info_w * 5);
